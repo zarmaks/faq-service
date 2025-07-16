@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.env
+.env
+venv/
+.venv/
+
+# VS Code
+.vscode/
+
+# Jupyter
+*.ipynb_checkpoints
+
+# Data
+*.sqlite3
+*.db
+*.log
+data/*.txt
+
+# Docker
+*.pid
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Others
+*.bak
+*.swp
+*.tmp
+
+# Ignore environment and secrets
+.env*
+secrets.*
+
+# Ignore test coverage
+htmlcov/
+.coverage
+coverage.xml
+
+# Ignore dist
+build/
+dist/
+*.egg-info/
