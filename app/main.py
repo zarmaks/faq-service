@@ -12,10 +12,18 @@ Main FastAPI application entry point.
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import logging
 
 from .database import engine
 from .models import Base
 from .routes import router
+
+# Ρύθμιση logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Δημιουργούμε τους πίνακες στη βάση (αν δεν υπάρχουν ήδη)
 Base.metadata.create_all(bind=engine)
