@@ -16,6 +16,7 @@ from .database import get_db
 from .models import Question
 from .schemas import QuestionRequest, AnswerResponse, QuestionHistory
 from .llm_service import llm_service
+from .rag_service import HybridRAGService
 
 # Ρυθμίζουμε το logging
 logger = logging.getLogger(__name__)
@@ -26,6 +27,19 @@ router = APIRouter(
     prefix="/api/v1",  # Όλα τα endpoints θα ξεκινούν με /api/v1
     tags=["faq"],      # Για την οργάνωση στο documentation
 )
+
+# Initialize RAG service - θα γίνει μία φορά κατά την εκκίνηση
+rag_service = None
+
+def get_rag_service():
+    """Lazy initialization του RAG service."""
+    global rag_service
+    if rag_service is None:
+        knowledge_base_path = os.path.join("data", "knowledge_base.txt")
+        if not os.path.exists(knowledge_base_path):
+            raise FileNotFoundError(f"Knowledge base not found at {knowledge_base_path}")
+        rag_service = HybridRAGService(knowledge_base_path)
+    return rag_service
 
 
 @router.post("/ask", response_model=AnswerResponse)
@@ -38,7 +52,7 @@ async def ask_question(
     
     Η διαδικασία:
     1. Λαμβάνουμε την ερώτηση από τον χρήστη
-    2. Διαβάζουμε το knowledge base από το αρχείο
+    2. Χρησιμοποιούμε το RAG για να βρούμε σχετικό context
     3. Στέλνουμε την ερώτηση και το context στο LLM
     4. Αποθηκεύουμε την ερώτηση και απάντηση στη βάση
     5. Επιστρέφουμε την απάντηση
@@ -51,27 +65,20 @@ async def ask_question(
         AnswerResponse με την απάντηση του AI
     """
     try:
-        # Διαβάζουμε το knowledge base
-        knowledge_base_path = os.path.join("data", "knowledge_base.txt")
+        # Παίρνουμε το RAG service
+        rag = get_rag_service()
         
-        # Ελέγχουμε αν υπάρχει το αρχείο
-        if not os.path.exists(knowledge_base_path):
-            logger.error(f"Knowledge base not found at {knowledge_base_path}")
-            raise HTTPException(
-                status_code=500,
-                detail="Knowledge base file not found. Please ensure data/knowledge_base.txt exists."
-            )
+        logger.info(f"📝 Processing question: {request.question[:50]}...")
         
-        # Διαβάζουμε το περιεχόμενο
-        with open(knowledge_base_path, 'r', encoding='utf-8') as f:
-            knowledge_base = f.read()
+        # Χρησιμοποιούμε το RAG για να βρούμε relevant context
+        context = rag.get_context_for_llm(request.question)
         
-        logger.info(f"📖 Loaded knowledge base ({len(knowledge_base)} chars)")
+        logger.info(f"🔍 RAG found relevant context ({len(context)} chars)")
         
-        # Παίρνουμε απάντηση από το LLM
-        answer_text = llm_service.generate_answer(
+        # Παίρνουμε απάντηση από το LLM με το context
+        answer_text = llm_service.generate_answer_with_context(
             question=request.question,
-            knowledge_base=knowledge_base
+            context=context
         )
         
         # Δημιουργούμε νέο record στη βάση
@@ -189,7 +196,55 @@ async def test_llm_connection():
         )
 
 
-@router.get("/stats")
+@router.post("/rag/search")
+async def search_knowledge_base(request: QuestionRequest):
+    """
+    Εκτελεί RAG search χωρίς να καλέσει το LLM.
+    
+    Αυτό το endpoint είναι χρήσιμο για:
+    - Debugging του RAG system
+    - Κατανόηση του πώς λειτουργεί το hybrid search
+    - Testing χωρίς να περιμένεις το LLM
+    
+    Returns:
+        Detailed search results με scores και explanations
+    """
+    try:
+        rag = get_rag_service()
+        
+        # Εκτέλεση hybrid search
+        results = rag.search(request.question, n_results=5)
+        
+        # Μετατροπή αποτελεσμάτων σε JSON-friendly format
+        search_results = []
+        for result in results:
+            search_results.append({
+                "question": result.qa_pair.question,
+                "answer": result.qa_pair.answer[:200] + "..." if len(result.qa_pair.answer) > 200 else result.qa_pair.answer,
+                "scores": {
+                    "semantic": round(result.semantic_score, 3),
+                    "keyword": round(result.keyword_score, 3),
+                    "combined": round(result.combined_score, 3)
+                },
+                "match_type": result.match_type,
+                "explanation": result.explanation
+            })
+        
+        # Παίρνουμε και explanation για το search
+        explanation = rag.explain_results(request.question)
+        
+        return {
+            "query": request.question,
+            "results": search_results,
+            "explanation": explanation,
+            "context_preview": rag.get_context_for_llm(request.question)[:500] + "..."
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"RAG search failed: {str(e)}"
+        )
 async def get_stats(db: Session = Depends(get_db)):
     """
     Get statistics about the FAQ system.

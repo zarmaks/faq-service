@@ -53,7 +53,8 @@ class EmbeddingsService:
             models = response.json().get("models", [])
             model_names = [m["name"] for m in models]
             
-            if self.model not in model_names:
+            # Έλεγχος αν το model υπάρχει (με ή χωρίς :latest tag)
+            if not any(self.model in model for model in model_names):
                 logger.warning(f"⚠️  Embedding model '{self.model}' not found!")
                 logger.info(f"📥 Please run: ollama pull {self.model}")
                 logger.info("This is a small model (~274MB) optimized for embeddings")

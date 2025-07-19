@@ -99,6 +99,17 @@ async def startup_event():
     """
     print("🚀 FAQ Service is starting up...")
     print("📚 Database tables created/verified")
+    
+    # Initialize RAG service during startup
+    from .routes import get_rag_service
+    try:
+        print("🔄 Initializing RAG service...")
+        get_rag_service()
+        print("✅ RAG service initialized successfully!")
+    except Exception as e:
+        print(f"❌ Failed to initialize RAG service: {e}")
+        logger.error(f"RAG initialization failed: {e}")
+    
     print("✅ Ready to serve requests!")
 
 

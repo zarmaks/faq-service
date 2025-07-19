@@ -27,7 +27,7 @@ class QuestionRequest(BaseModel):
 
     source: Optional[str] = Field(
         default="api",
-        regex="^(web|api|mobile)$",  # Μόνο αυτές οι τιμές επιτρέπονται
+        pattern="^(web|api|mobile)$",  # Μόνο αυτές οι τιμές επιτρέπονται
         description="The source of the question (e.g., 'api', 'web', etc.)"
     )
 
